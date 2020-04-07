@@ -1,7 +1,7 @@
 -include ../petscdir.mk
 CFLAGS     =
 CPPFLAGS   =
-LIBFILES   = 
+LIBFILES   = ${PETSC_KSP_LIB} 
 TARGET     = main
 OBJFILES   = main.o 
 CLEANFILES = $(TARGET)
@@ -11,4 +11,4 @@ include ${PETSC_DIR}/lib/petsc/conf/test
 
 all: $(TARGET)
 $(TARGET) : $(OBJFILES)
-	${CLINKER} -o $(TARGET) $(OBJFILES) ${PETSC_KSP_LIB}
+	${CLINKER} -o $(TARGET) $(OBJFILES) $(LIBFILES) 
