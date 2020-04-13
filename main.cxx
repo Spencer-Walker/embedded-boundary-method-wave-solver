@@ -12,7 +12,7 @@ int main(int argc,char **argv)
   PetscMPIInt    rank,size,message;
   // PETSC error code
   PetscErrorCode ierr;
-  // Discritization manager
+  // Discritization manager/distributed array
   DM             da;
   // Local and global solution vectors
   Vec            local,global;
