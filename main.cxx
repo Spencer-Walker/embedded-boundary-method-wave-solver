@@ -79,7 +79,8 @@ int main(int argc,char **argv)
   // Create timestepping solver context
   TSCreate(PETSC_COMM_WORLD,&ts);
   TSSetDM(ts,da);
-  TSSetProblemType(ts,TS_NONLINEAR);
+  TSSetProblemType(ts,TS_LINEAR);
+  
   TSSetRHSFunction(ts,NULL,FormFunction,da);
   TSSetMaxTime(ts,1.0);
   TSMonitorSet(ts,MyTSMonitor,0,0);
