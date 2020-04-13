@@ -17,4 +17,4 @@ print("mpirun -np " + str(data["np"]) + \
 
 os.system("mpirun -np " + str(data["np"]) + \
   " "+path+"/main" + parameters_str)
-
+  
