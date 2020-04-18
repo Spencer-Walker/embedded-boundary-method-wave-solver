@@ -1,43 +1,43 @@
 // Some extra information
 static char help[] = "Solves the wave equation using some embedded boundary method\n\n";
 /*
-  u_tt - \Delta u = 0
+  u_tt - \Delta u_old = 0
 
   which we split into two first-order systems
 
-  u_t -     v    = 0 
-  v_t - \Delta u = 0 
+  u_t -     u    = 0 
+  v_t - \Delta u_old = 0 
 */
 
 // Include some petsc stuff
 #include <petscdmda.h>
 #include <petscts.h>
+#include <iostream>
+#include <iomanip>
 // Function that makes each processor print in order 
 extern void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...);
-extern PetscErrorCode FormFunction(TS,PetscReal,Vec,Vec,void*),FormInitialSolution(DM,Vec);
-extern PetscErrorCode MyTSMonitor(TS,PetscInt,PetscReal,Vec,void*);
+extern PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt2);
+extern PetscErrorCode FormInitialSolution(DM,Vec, PetscReal, PetscReal, PetscReal);
+extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
 
 // Main
 int main(int argc,char **argv)
 {
   //---------------------------------------------------------------------------
   // Number of global gridpoints in the x and y direction
-  PetscInt       Nx = 5, Ny = 4;
+  PetscInt       Mx = 50, My = 50;
   // MPI rank and size
   PetscMPIInt    rank,size;
   // PETSC error code
   PetscErrorCode ierr;
   // Discritization manager/distributed array
   DM             da;
-  // Timestepping context
-  TS             ts;
   // Solution and residual vectors 
-  Vec            x,r;                        
+  Vec            x;                      
   // PETSC viewer for exporting/printing complicated data structures
   PetscViewer    viewer;
-  PetscInt       steps;    
-  SNES           ts_snes;
-  PetscReal      ftime;   
+  // 
+  PetscReal      dt = 0.005, Lx = 1.0, Ly = 1.0;
   //-------------------------------------------------------------------------------------
   // Setup PETSC and MPI 
   //-------------------------------------------------------------------------------------
@@ -50,63 +50,57 @@ int main(int argc,char **argv)
 
   // Print hi in order
   printInOrder(rank,size,"HI FROM RANK = %d of SIZE = %d \n", rank, size);
-
-  // Create a viewer object that prints ascii to terminal
-  PetscViewerCreate(PETSC_COMM_WORLD,&viewer);
-  PetscViewerSetType(viewer,PETSCVIEWERASCII);	
   
   // Extra command line arguments for the global gridpoints 
-  ierr = PetscOptionsGetInt(NULL,NULL,"-Nx",&Nx,NULL);CHKERRQ(ierr);
-  ierr = PetscOptionsGetInt(NULL,NULL,"-Ny",&Ny,NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsGetInt(NULL,NULL,"-Mx",&Mx,NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsGetInt(NULL,NULL,"-My",&My,NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsGetReal(NULL,NULL,"-Lx",&Lx,NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsGetReal(NULL,NULL,"-Ly",&Ly,NULL);CHKERRQ(ierr);
   
   // Only rank 0 prints things (just gridpoints for now)
   if (rank == 0) 
-     PetscPrintf(PETSC_COMM_SELF,"[%d/%d] Nx = %D, Ny = %D \n",rank,size,Nx,Ny); 
+     PetscPrintf(PETSC_COMM_SELF,"[%d/%d] Mx = %D, My = %D \n",rank,size,Mx,My); 
 
   // Create the 2D grid that we will use for this problem
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Nx, Ny, PETSC_DECIDE, PETSC_DECIDE, 2, 1, PETSC_NULL, PETSC_NULL, &da);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 2, 1, PETSC_NULL, PETSC_NULL, &da);
   DMSetFromOptions(da);
   DMSetUp(da);
-  DMDASetFieldName(da,0,"u");
-  DMDASetFieldName(da,1,"v");
-
+  DMDASetFieldName(da,0,"u_old");
+  DMDASetFieldName(da,1,"u");
 
   // Create solution and residual vectors
-  DMCreateGlobalVector(da,&x);
-  VecDuplicate(x,&r);
+  DMCreateGlobalVector(da,&x);  
 
-  // Create timestepping solver context
-  TSCreate(PETSC_COMM_WORLD,&ts);
-  TSSetDM(ts,da);
-  TSSetProblemType(ts,TS_LINEAR);
+  // Set initial condition 
+  FormInitialSolution(da,x,Lx,Ly,dt);
   
-  TSSetRHSFunction(ts,NULL,FormFunction,da);
-  TSSetMaxTime(ts,1.0);
-  TSMonitorSet(ts,MyTSMonitor,0,0);
-  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
-  // Customize solver 
-  TSSetType(ts,TSBEULER);
-  TSGetSNES(ts,&ts_snes);
+  // Norm
+  PetscReal norm;
+  ierr = VecNorm(x,NORM_2,&norm);CHKERRQ(ierr);
+  if (rank == 0)
+    std::cout << "Initial Norm = " << norm << std::endl;
 
-  // Set initial conditions
-  FormInitialSolution(da,x);
-  TSSetTime(ts,0.0);
-  TSSetTimeStep(ts,0.0001);
-  TSSetSolution(ts,x);
+  PetscReal dt2 = dt*dt;
 
-  // Set runtime options
-  TSSetFromOptions(ts);
+  for(int i = 0; i< 500; i++)
+  {
+    // Timestep 
+    TimeStep(da,Lx,Ly,x,dt2);
 
-  // Solve the system
-  TSSolve(ts,x);
-  TSGetSolveTime(ts,&ftime);
-  TSGetStepNumber(ts,&steps);
+    ierr = VecNorm(x,NORM_2,&norm);CHKERRQ(ierr);
+    if (rank == 0)
+      std::cout << "Norm = " << std::setprecision (16) << norm << std::endl;
+    std::string s = "wave"+std::to_string(i)+".out";
+    PetscViewerASCIIOpen(PETSC_COMM_WORLD,s.c_str(),&viewer);
+    VecView(x,viewer);
+
+  }
+
 
   // Free space 
   VecDestroy(&x);
-  VecDestroy(&r);
-  TSDestroy(&ts);
   DMDestroy(&da);
 
   // Close PETSC (and MPI)
@@ -147,9 +141,9 @@ void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...)
 
 /* ------------------------------------------------------------------- */
 #undef __FUNCT__
-#define __FUNCT__ "FormFunction"
+#define __FUNCT__ "TimeStep"
 /*
-   FormFunction - Evaluates nonlinear function, F(x).
+   TimeStep - Evaluates nonlinear function, F(x).
 
    Input Parameters:
 .  ts - the TS context
@@ -159,13 +153,12 @@ void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...)
    Output Parameter:
 .  F - function vector
  */
-PetscErrorCode FormFunction(TS ts,PetscReal ftime,Vec X,Vec F,void *ptr)
+PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt2)
 {
-  DM             da = (DM)ptr;
   PetscErrorCode ierr;
   PetscInt       i,j,Mx,My,xs,ys,xm,ym;
   PetscReal      hx,hy,/*hxdhy,hydhx,*/ sx,sy;
-  PetscScalar    u,uxx,uyy,v,***x,***f;
+  PetscScalar    u_old,uxx,uyy,u,***x, tmp_x;
   Vec            localX;
 
   PetscFunctionBeginUser;
@@ -173,8 +166,8 @@ PetscErrorCode FormFunction(TS ts,PetscReal ftime,Vec X,Vec F,void *ptr)
   ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
                      PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
 
-  hx = 1.0/(PetscReal)(Mx-1); sx = 1.0/(hx*hx);
-  hy = 1.0/(PetscReal)(My-1); sy = 1.0/(hy*hy);
+  hx = Lx/(PetscReal)(Mx-1); sx = 1.0/(hx*hx);
+  hy = Ly/(PetscReal)(My-1); sy = 1.0/(hy*hy);
   /*hxdhy  = hx/hy;*/
   /*hydhx  = hy/hx;*/
 
@@ -191,7 +184,6 @@ PetscErrorCode FormFunction(TS ts,PetscReal ftime,Vec X,Vec F,void *ptr)
      Get pointers to vector data
   */
   ierr = DMDAVecGetArrayDOF(da,localX,&x);CHKERRQ(ierr);
-  ierr = DMDAVecGetArrayDOF(da,F,&f);CHKERRQ(ierr);
 
   /*
      Get local grid boundaries
@@ -204,33 +196,43 @@ PetscErrorCode FormFunction(TS ts,PetscReal ftime,Vec X,Vec F,void *ptr)
   for (j=ys; j<ys+ym; j++) {
     for (i=xs; i<xs+xm; i++) {
       if (i == 0 || j == 0 || i == Mx-1 || j == My-1) {
-        f[j][i][0] = x[j][i][0];
-        f[j][i][1] = x[j][i][1];
         continue;
       }
-      u          = x[j][i][0];
-      v          = x[j][i][1];
-      uxx        = (-2.0*u + x[j][i-1][0] + x[j][i+1][0])*sx;
-      uyy        = (-2.0*u + x[j-1][i][0] + x[j+1][i][0])*sy;
-      f[j][i][0] = v;
-      f[j][i][1] = uxx + uyy;
+      u_old      = x[j][i][0];
+      u          = x[j][i][1];
+      uxx        = (-2.0*u + x[j][i-1][1] + x[j][i+1][1])*sx;
+      uyy        = (-2.0*u + x[j-1][i][1] + x[j+1][i][1])*sy;
+      x[j][i][0] = dt2*(uxx + uyy)+2.0*u-u_old;
     }
   }
+
+  for (j=ys; j<ys+ym; j++) {
+    for (i=xs; i<xs+xm; i++) {
+      tmp_x = x[j][i][0];
+      x[j][i][0] = x[j][i][1];
+      x[j][i][1] = tmp_x;
+    }
+  }
+
 
   /*
      Restore vectors
   */
   ierr = DMDAVecRestoreArrayDOF(da,localX,&x);CHKERRQ(ierr);
-  ierr = DMDAVecRestoreArrayDOF(da,F,&f);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da,localX,INSERT_VALUES,X);
+  DMLocalToGlobalEnd(da,localX,INSERT_VALUES,X);
   ierr = DMRestoreLocalVector(da,&localX);CHKERRQ(ierr);
-  ierr = PetscLogFlops(11.0*ym*xm);CHKERRQ(ierr);
+
+
+
   PetscFunctionReturn(0);
 }
+
 
 /* ------------------------------------------------------------------- */
 #undef __FUNCT__
 #define __FUNCT__ "FormInitialSolution"
-PetscErrorCode FormInitialSolution(DM da,Vec U)
+PetscErrorCode FormInitialSolution(DM da,Vec U, PetscReal Lx, PetscReal Ly, PetscReal dt)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,xs,ys,xm,ym,Mx,My;
@@ -241,8 +243,8 @@ PetscErrorCode FormInitialSolution(DM da,Vec U)
   ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
                      PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
 
-  hx = 1.0/(PetscReal)(Mx-1);
-  hy = 1.0/(PetscReal)(My-1);
+  hx = Lx/(PetscReal)(Mx-1);
+  hy = Lx/(PetscReal)(My-1);
 
   /*
      Get pointers to vector data
@@ -261,10 +263,10 @@ PetscErrorCode FormInitialSolution(DM da,Vec U)
     y = j*hy;
     for (i=xs; i<xs+xm; i++) {
       x = i*hx;
-      r = PetscSqrtScalar((x-.5)*(x-.5) + (y-.5)*(y-.5));
-      if (r < .125) {
-        u[j][i][0] = PetscExpScalar(-30.0*r*r*r);
-        u[j][i][1] = 0.0;
+      r = PetscSqrtScalar((x-.5*Lx)*(x-.5*Lx) + (y-.5*Ly)*(y-.5*Ly));
+      if (r < Lx || r < Ly) {
+        u[j][i][0] = PetscExpScalar(-30.0*r*r);
+        u[j][i][1] = PetscExpScalar(-30.0*r*r)+ 0.0*dt;
       } else {
         u[j][i][0] = 0.0;
         u[j][i][1] = 0.0;
@@ -276,21 +278,6 @@ PetscErrorCode FormInitialSolution(DM da,Vec U)
      Restore vectors
   */
   ierr = DMDAVecRestoreArrayDOF(da,U,&u);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
-
-#undef __FUNCT__
-#define __FUNCT__ "MyTSMonitor"
-PetscErrorCode MyTSMonitor(TS ts,PetscInt step,PetscReal ptime,Vec v,void *ctx)
-{
-  PetscErrorCode ierr;
-  PetscReal      norm;
-  MPI_Comm       comm;
-
-  PetscFunctionBeginUser;
-  ierr = VecNorm(v,NORM_2,&norm);CHKERRQ(ierr);
-  ierr = PetscObjectGetComm((PetscObject)ts,&comm);CHKERRQ(ierr);
-  ierr = PetscPrintf(comm,"timestep %D time %g norm %g\n",step,ptime,norm);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
