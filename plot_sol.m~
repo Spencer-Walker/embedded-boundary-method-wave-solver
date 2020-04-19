@@ -1,6 +1,6 @@
 clear all; 
 close all;
-Mx = 200; My = 200; Lx = 1.0; Ly = 1.0; Nt = 500;
+Mx = 100; My = 100; Lx = 1.0; Ly = 1.0; Nt = 500;
 
 U = zeros(Mx,My,Nt);
 
@@ -20,8 +20,6 @@ opts.ImportErrorRule = "omitrow";
 opts.MissingRule = "omitrow";
 opts.ExtraColumnsRule = "ignore";
 opts.EmptyLineRule = "read";
-x = linspace(0,Lx,Mx);
-y = linspace(0,Ly,My);
 
 for i = 1:Nt
   % Import the data
@@ -31,12 +29,13 @@ for i = 1:Nt
   tmp = table2array(dat);
 
   U(:,:,i) = reshape(tmp(1:4:end,:),Mx,My);
-  imagesc(x,y,((U(:,:,i))));
-  colormap('jet')
-  colorbar
-  axis([0.15 1-0.15 0.15 1-0.15])
-  caxis([-1,1])
-  pause(0.001)
+  imagesc(((U(:,:,i))));
+  hold on
+  x = zeros(size(
+  hold off
+  colorbar 
+  caxis([-4e-1,4e-1])
+  pause(0.005)
 end 
 %% Clear temporary variables
 clear opts tmp

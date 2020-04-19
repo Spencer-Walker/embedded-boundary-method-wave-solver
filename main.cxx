@@ -217,9 +217,13 @@ PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, 
       x[j][i][0] = (dt2*(uxx + uyy) +(2.0-dt2*PMLX*PMLY)*u+(dt*(PMLX+PMLY)-1.0)*u_old+ dt2*(x[j][i+1][2]-x[j][i+1][2])/(2*hx) + dt2*(x[j+1][i][3]-x[j-1][i][3])/(2*hy)   )/(1.0+dt*(PMLX+PMLY));
       x[j][i][2] = dt*(-PMLX*x[j][i][2] +(PMLY-PMLX)*(x[j][i+1][1] - x[j][i-1][1])/(2*hx));
       x[j][i][3] = dt*(-PMLY*x[j][i][3] +(PMLX-PMLY)*(x[j+1][i][1] - x[j-1][i][1])/(2*hy));
-      if (i == floor(Mx/2.0) and j == floor(My/2.0))
+      if (i == floor(Mx/10.0) )
       {
         x[j][i][0] = sin(100.0*t);
+      }
+      if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) + (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.2*0.2)
+      {
+        x[j][i][0] = 0.0;
       }
     }
   }
