@@ -1,4 +1,6 @@
-Mx = 50; My = 50; Lx = 1.0; Ly = 1.0; Nt = 500;
+clear all; 
+close all;
+Mx = 100; My = 100; Lx = 1.0; Ly = 1.0; Nt = 500;
 
 U = zeros(Mx,My,Nt);
 
@@ -26,8 +28,10 @@ for i = 1:Nt
   %% Convert to output type
   tmp = table2array(dat);
 
-  U(:,:,i) = reshape(tmp(1:2:end,:),Mx,My);
-  imagesc(abs(U(:,:,i)).^2);
+  U(:,:,i) = reshape(tmp(1:4:end,:),Mx,My);
+  imagesc(((U(:,:,i))));
+  colorbar 
+  caxis([-1e-3,1e-3])
   pause(0.1)
 end 
 %% Clear temporary variables
