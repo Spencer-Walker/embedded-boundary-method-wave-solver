@@ -1,8 +1,8 @@
 clear all; 
 close all;
-Mx = 200; My = 200; Lx = 1.0; Ly = 1.0; Nt = 500;
+Mx = 400; My = 400; Lx = 1.0; Ly = 1.0; Nt = 1000;
 
-U = zeros(Mx,My,Nt);
+U = zeros(Mx,My);
 
 %% Setup the Import Options and import the data
 opts = delimitedTextImportOptions("NumVariables", 1);
@@ -22,23 +22,38 @@ opts.ExtraColumnsRule = "ignore";
 opts.EmptyLineRule = "read";
 x = linspace(0,Lx,Mx);
 y = linspace(0,Ly,My);
-
-for i = 1:Nt
+figure
+set(gcf, 'Units', 'Normalized', 'OuterPosition', [0 0 1 1]);
+set(gca,'nextplot','replacechildren'); 
+v = VideoWriter('wave.avi');
+open(v);
+for i = 1:1:Nt
   % Import the data
   dat = readtable("/home/spencerwalker/Documents/repos/embedded-boundary-method-wave-solver/wave"+(i-1)+".out", opts);
 
   %% Convert to output type
   tmp = table2array(dat);
 
-  U(:,:,i) = reshape(tmp(1:4:end,:),Mx,My);
-  imagesc(x,y,((U(:,:,i))));
+  U(:,:) = reshape(tmp(1:4:end,:),Mx,My);
+      imagesc(x,y,(U(:,:)));
   colormap('jet')
+  caxis([-0.1,0.1])
   colorbar
-  axis([0.15 1-0.15 0.15 1-0.15])
-  caxis([-1,1])
-  pause(0.001)
+  hold on
+  r=0.1;
+  x0=Lx/2;
+  y0=Ly/2;
+  fplot(@(t) r*cos(t)+x0,@(t) r*sin(t)+y0,[0,2*pi],'k','LineWidth',2)
+  xline(0.25)
+  yline(0.25)
+  xline(0.75)
+  yline(0.75)
+  hold off
+  axis equal
+  frame = getframe(gcf);
+  writeVideo(v,frame);
 end 
 %% Clear temporary variables
 clear opts tmp
-
-
+%%
+close(v)

@@ -18,7 +18,7 @@ static char help[] = "Solves the wave equation using some embedded boundary meth
 extern void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...);
 extern PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, \
   PetscReal pml_width, PetscReal pml_strength, PetscReal t);
-extern PetscErrorCode FormInitialSolution(DM,Vec, PetscReal, PetscReal, PetscReal);
+extern PetscErrorCode FormInitialSolution(DM,Vec, PetscReal, PetscReal, PetscReal,PetscReal);
 extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
 extern PetscReal PML(PetscReal Lx, PetscReal x, PetscReal width, PetscReal amp);
 
@@ -39,7 +39,7 @@ int main(int argc,char **argv)
   // PETSC viewer for exporting/printing complicated data structures
   PetscViewer    viewer;
   // 
-  PetscReal      dt = 0.005, Lx = 1.0, Ly = 1.0, pml_width = 0.1, pml_strength = 80.0;
+  PetscReal      dt = 0.005, Lx = 1.0, Ly = 1.0, pml_width = 0.0, pml_strength = 0.0;
   //-------------------------------------------------------------------------------------
   // Setup PETSC and MPI 
   //-------------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ int main(int argc,char **argv)
   DMCreateGlobalVector(da,&x);  
 
   // Set initial condition 
-  FormInitialSolution(da,x,Lx,Ly,dt);
+  FormInitialSolution(da,x,Lx,Ly,dt,pml_width);
   
   // Norm
   PetscReal norm;
@@ -214,14 +214,26 @@ PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, 
       u          = x[j][i][1];
       uxx        = (-2.0*u + x[j][i-1][1] + x[j][i+1][1])*sx;
       uyy        = (-2.0*u + x[j-1][i][1] + x[j+1][i][1])*sy;
-      x[j][i][0] = (dt2*(uxx + uyy) +(2.0-dt2*PMLX*PMLY)*u+(dt*(PMLX+PMLY)-1.0)*u_old+ dt2*(x[j][i+1][2]-x[j][i+1][2])/(2*hx) + dt2*(x[j+1][i][3]-x[j-1][i][3])/(2*hy)   )/(1.0+dt*(PMLX+PMLY));
-      x[j][i][2] = dt*(-PMLX*x[j][i][2] +(PMLY-PMLX)*(x[j][i+1][1] - x[j][i-1][1])/(2*hx));
-      x[j][i][3] = dt*(-PMLY*x[j][i][3] +(PMLX-PMLY)*(x[j+1][i][1] - x[j-1][i][1])/(2*hy));
-      if (i == floor(Mx/10.0) )
+      if (i*hx<pml_width||Lx-i*hx<pml_width||j*hy<pml_width||Ly-j*hy<pml_width)
       {
-        x[j][i][0] = sin(100.0*t);
+        x[j][i][0] = (dt2*(uxx + uyy) +(2.0-dt2*PMLX*PMLY)*u+(dt*(PMLX+PMLY)-1.0)*u_old+ dt2*(x[j][i+1][2]-x[j][i+1][2])/(2*hx) + dt2*(x[j+1][i][3]-x[j-1][i][3])/(2*hy)   )/(1.0+dt*(PMLX+PMLY));
+        x[j][i][2] = dt*(-PMLX*x[j][i][2] +(PMLY-PMLX)*(x[j][i+1][1] - x[j][i-1][1])/(2*hx));
+        x[j][i][3] = dt*(-PMLY*x[j][i][3] +(PMLX-PMLY)*(x[j+1][i][1] - x[j-1][i][1])/(2*hy));
       }
-      if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) + (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.2*0.2)
+      else
+      {
+        x[j][i][0] = dt2*(uxx + uyy) + 2.0*u -1.0*u_old;
+      }
+      
+
+      // Sin source being shot at the target
+      if (i == floor(Mx*0.23/4) and t < 2.0*M_PI/50.0 and j*hy>pml_width and j*hy<Ly-pml_width)
+      {
+        x[j][i][0] = sin(50.0*t)*sin(50.0*t)*sin(50.0*t);
+      }
+
+      // Set all values inside of sphere = 0 (TEMP UNTIL EMBEDDED BOUNDARY SET)
+      if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) + (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
       {
         x[j][i][0] = 0.0;
       }
@@ -254,7 +266,7 @@ PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, 
 /* ------------------------------------------------------------------- */
 #undef __FUNCT__
 #define __FUNCT__ "FormInitialSolution"
-PetscErrorCode FormInitialSolution(DM da,Vec U, PetscReal Lx, PetscReal Ly, PetscReal dt)
+PetscErrorCode FormInitialSolution(DM da,Vec U, PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,xs,ys,xm,ym,Mx,My;
@@ -281,23 +293,18 @@ PetscErrorCode FormInitialSolution(DM da,Vec U, PetscReal Lx, PetscReal Ly, Pets
   /*
      Compute function over the locally owned part of the grid
   */
-  for (j=ys; j<ys+ym; j++) {
+  for (j=ys; j<ys+ym; j++) 
+  {
     y = j*hy;
-    for (i=xs; i<xs+xm; i++) {
+    for (i=xs; i<xs+xm; i++) 
+    {
       x = i*hx;
-      r = PetscSqrtScalar((x-.5*Lx)*(x-.5*Lx) + (y-.5*Ly)*(y-.5*Ly));
-      if (r < Lx || r < Ly) {
-        u[j][i][0] = 0.0;//PetscExpScalar(-30.0*r*r*r);
-        u[j][i][1] = 0.0;//PetscExpScalar(-30.0*r*r*r)+ 0.0*dt;
-        u[j][i][2] = 0.0;
-        u[j][i][3] = 0.0;
-      } else {
-        u[j][i][0] = 0.0;
-        u[j][i][1] = 0.0;
-        u[j][i][2] = 0.0;
-        u[j][i][3] = 0.0;
-      }
+      u[j][i][0] = 0.0;
+      u[j][i][1] = 0.0;
+      u[j][i][2] = 0.0;
+      u[j][i][3] = 0.0;
     }
+    
   }
 
   /*
