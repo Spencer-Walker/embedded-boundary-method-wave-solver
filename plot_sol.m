@@ -1,6 +1,6 @@
 clear all; 
 close all;
-Mx = 400; My = 400; Lx = 1.0; Ly = 1.0; Nt = 1000;
+Mx = 200; My = 200; Lx = 1.0; Ly = 1.0; Nt = 250;
 
 U = zeros(Mx,My);
 
@@ -37,7 +37,7 @@ for i = 1:1:Nt
   U(:,:) = reshape(tmp(1:4:end,:),Mx,My);
       imagesc(x,y,(U(:,:)));
   colormap('jet')
-  caxis([-0.1,0.1])
+  caxis([-1,1])
   colorbar
   hold on
   r=0.1;

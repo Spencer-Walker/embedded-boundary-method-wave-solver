@@ -17,7 +17,7 @@ static char help[] = "Solves the wave equation using some embedded boundary meth
 // Function that makes each processor print in order 
 extern void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...);
 extern PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, \
-  PetscReal pml_width, PetscReal pml_strength, PetscReal t);
+  PetscReal pml_width, PetscReal pml_strength, PetscReal t, PetscReal w);
 extern PetscErrorCode FormInitialSolution(DM,Vec, PetscReal, PetscReal, PetscReal,PetscReal);
 extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
 extern PetscReal PML(PetscReal Lx, PetscReal x, PetscReal width, PetscReal amp);
@@ -40,6 +40,7 @@ int main(int argc,char **argv)
   PetscViewer    viewer;
   // 
   PetscReal      dt = 0.005, Lx = 1.0, Ly = 1.0, pml_width = 0.0, pml_strength = 0.0;
+  PetscReal      w = 100.0;
   //-------------------------------------------------------------------------------------
   // Setup PETSC and MPI 
   //-------------------------------------------------------------------------------------
@@ -62,7 +63,7 @@ int main(int argc,char **argv)
   ierr = PetscOptionsGetReal(NULL,NULL,"-Ly",&Ly,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-pml_width",&pml_width,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-pml_strength",&pml_strength,NULL);CHKERRQ(ierr);
-  
+  ierr = PetscOptionsGetReal(NULL,NULL,"-w",&w,NULL);CHKERRQ(ierr);
   // Only rank 0 prints things (just gridpoints for now)
   if (rank == 0) 
      PetscPrintf(PETSC_COMM_SELF,"[%d/%d] Mx = %D, My = %D \n",rank,size,Mx,My); 
@@ -92,7 +93,7 @@ int main(int argc,char **argv)
   for(int i = 0; i< Nt; i++)
   {
     // Timestep 
-    TimeStep(da,Lx,Ly,x,dt,pml_width,pml_strength,dt*i);
+    TimeStep(da,Lx,Ly,x,dt,pml_width,pml_strength,dt*i,w);
 
     ierr = VecNorm(x,NORM_2,&norm);CHKERRQ(ierr);
     if (rank == 0)
@@ -159,7 +160,7 @@ void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...)
 .  F - function vector
  */
 PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, \
-  PetscReal pml_width, PetscReal pml_strength, PetscReal t)
+  PetscReal pml_width, PetscReal pml_strength, PetscReal t, PetscReal w)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,Mx,My,xs,ys,xm,ym;
@@ -224,18 +225,11 @@ PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, 
       {
         x[j][i][0] = dt2*(uxx + uyy) + 2.0*u -1.0*u_old;
       }
-      
-
-      // Sin source being shot at the target
-      if (i == floor(Mx*0.23/4) and t < 2.0*M_PI/50.0 and j*hy>pml_width and j*hy<Ly-pml_width)
-      {
-        x[j][i][0] = sin(50.0*t)*sin(50.0*t)*sin(50.0*t);
-      }
 
       // Set all values inside of sphere = 0 (TEMP UNTIL EMBEDDED BOUNDARY SET)
       if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) + (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
       {
-        x[j][i][0] = 0.0;
+        x[j][i][0] = sin(w*(hx*i-t));
       }
     }
   }
