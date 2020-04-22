@@ -16,11 +16,11 @@ static char help[] = "Solves the wave equation using some embedded boundary meth
 #include <iomanip>
 // Function that makes each processor print in order 
 extern void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...);
-externPetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2_old,DM da_phi2, \
+extern PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2_old,DM da_phi2, 
   PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
   Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
   PetscReal t, PetscReal kx, PetscReal ky);
-PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
+extern PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
   , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
   PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width);
 extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
@@ -84,7 +84,7 @@ int main(int argc,char **argv)
     Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_u);
   DMSetFromOptions(da_u);
   DMSetUp(da_u);  
-  DMDASetFieldName(da,0,"u");
+  DMDASetFieldName(da_u,0,"u");
 
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
     Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi1_old);
@@ -125,7 +125,7 @@ int main(int argc,char **argv)
   
   // Norm
   PetscReal norm;
-  ierr = VecNorm(x,NORM_2,&norm);CHKERRQ(ierr);
+  ierr = VecNorm(vec_u_old,NORM_2,&norm);CHKERRQ(ierr);
   if (rank == 0)
     std::cout << "Initial Norm = " << norm << std::endl;
 
@@ -158,7 +158,7 @@ int main(int argc,char **argv)
   DMDestroy(&da_phi1);
   DMDestroy(&da_phi2_old);
   DMDestroy(&da_phi2);
-  ViewerDestroy(&viewer);
+  PetscViewerDestroy(&viewer);
   // Close PETSC (and MPI)
   PetscFinalize();
   PetscFunctionReturn(0);
@@ -217,38 +217,55 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
   PetscErrorCode ierr;
   PetscInt       i,j,Mx,My,xs,ys,xm,ym;
   PetscReal      hx,hy,/*hxdhy,hydhx,*/ sx,sy;
-  PetscScalar    u_old,uxx,uyy,u,***x, tmp_x;
+  PetscScalar    phi1_old,phi1,phi2_old,phi2,u_old,uxx,uyy,u,***array_u_old,***array_u,***array_phi1_old, ***array_phi1;
+  PetscScalar    ***array_phi2_old, ***array_phi2, tmp_x;
   Vec            local_u_old, local_u, local_phi1_old, local_phi1, local_phi2_old, local_phi2;
 
   PetscFunctionBeginUser;
-  ierr = DMGetLocalVector(da,&localX);CHKERRQ(ierr);
-  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
+  ierr = DMGetLocalVector(da_u_old,&local_u_old);CHKERRQ(ierr);
+  ierr = DMDAGetInfo(da_u_old,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
                      PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  ierr = DMGetLocalVector(da_u,&local_u);CHKERRQ(ierr);
+
+  ierr = DMGetLocalVector(da_phi1_old,&local_phi1_old);CHKERRQ(ierr);
+
+  ierr = DMGetLocalVector(da_phi1,&local_phi1);CHKERRQ(ierr);
+  
+  ierr = DMGetLocalVector(da_phi2_old,&local_phi2_old);CHKERRQ(ierr);
+  
+  ierr = DMGetLocalVector(da_phi2,&local_phi2);CHKERRQ(ierr);
+ 
 
   PetscReal dt2 = dt*dt;
   hx = Lx/(PetscReal)(Mx-1); sx = 1.0/(hx*hx);
   hy = Ly/(PetscReal)(My-1); sy = 1.0/(hy*hy);
-  /*hxdhy  = hx/hy;*/
-  /*hydhx  = hy/hx;*/
 
-  /*
-     Scatter ghost points to local vector,using the 2-step process
-        DMGlobalToLocalBegin(),DMGlobalToLocalEnd().
-     By placing code between these two statements, computations can be
-     done while messages are in transition.
-  */
-  ierr = DMGlobalToLocalBegin(da,X,INSERT_VALUES,localX);CHKERRQ(ierr);
-  ierr = DMGlobalToLocalEnd(da,X,INSERT_VALUES,localX);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalBegin(da_u_old,vec_u_old,INSERT_VALUES,local_u_old);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalEnd(da_u_old,vec_u_old,INSERT_VALUES,local_u_old);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_u_old,local_u_old,&array_u_old);CHKERRQ(ierr);
 
-  /*
-     Get pointers to vector data
-  */
-  ierr = DMDAVecGetArrayDOF(da,localX,&x);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalBegin(da_u,vec_u,INSERT_VALUES,local_u);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalEnd(da_u,vec_u,INSERT_VALUES,local_u);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_u,local_u,&array_u);CHKERRQ(ierr);
 
-  /*
-     Get local grid boundaries
-  */
-  ierr = DMDAGetCorners(da,&xs,&ys,NULL,&xm,&ym,NULL);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalBegin(da_phi1_old,vec_phi1_old,INSERT_VALUES,local_phi1_old);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalEnd(da_phi1_old,vec_phi1_old,INSERT_VALUES,local_phi1_old);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi1_old,local_phi1_old,&array_phi1_old);CHKERRQ(ierr);
+
+  ierr = DMGlobalToLocalBegin(da_phi1,vec_phi1,INSERT_VALUES,local_phi1);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalEnd(da_phi1,vec_phi1,INSERT_VALUES,local_phi1);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi1,local_phi1,&array_phi1);CHKERRQ(ierr);
+
+  ierr = DMGlobalToLocalBegin(da_phi2_old,vec_phi2_old,INSERT_VALUES,local_phi2_old);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalEnd(da_phi2_old,vec_phi2_old,INSERT_VALUES,local_phi2_old);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi2_old,local_phi2_old,&array_phi2_old);CHKERRQ(ierr);
+
+  ierr = DMGlobalToLocalBegin(da_phi2,vec_phi2,INSERT_VALUES,local_phi2);CHKERRQ(ierr);
+  ierr = DMGlobalToLocalEnd(da_phi2,vec_phi2,INSERT_VALUES,local_phi2);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi2,local_phi2,&array_phi2);CHKERRQ(ierr);
+
+  ierr = DMDAGetCorners(da_u,&xs,&ys,NULL,&xm,&ym,NULL);CHKERRQ(ierr);
 
   /*
      Compute function over the locally owned part of the grid
@@ -263,34 +280,49 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
       }
 
       PMLX = PML(Lx,i*hx,pml_width,pml_strength );
-      u_old      = x[j][i][0];
-      u          = x[j][i][1];
-      uxx        = (-2.0*u + x[j][i-1][1] + x[j][i+1][1])*sx;
-      uyy        = (-2.0*u + x[j-1][i][1] + x[j+1][i][1])*sy;
+      u_old      = array_u_old[j][i][0];
+      u          = array_u[j][i][0];
+      uxx        = (-2.0*u + array_u[j][i-1][0] + array_u[j][i+1][0])*sx;
+      uyy        = (-2.0*u + array_u[j-1][i][0] + array_u[j+1][i][0])*sy;
       if (i*hx<pml_width||Lx-i*hx<pml_width||j*hy<pml_width||Ly-j*hy<pml_width)
       {
-        x[j][i][0] = (dt2*(uxx + uyy) +(2.0-dt2*PMLX*PMLY)*u+(dt*(PMLX+PMLY)-1.0)*u_old+ dt2*(x[j][i+1][2]-x[j][i+1][2])/(2*hx) + dt2*(x[j+1][i][3]-x[j-1][i][3])/(2*hy)   )/(1.0+dt*(PMLX+PMLY));
-        x[j][i][2] = dt*(-PMLX*x[j][i][2] +(PMLY-PMLX)*(x[j][i+1][1] - x[j][i-1][1])/(2*hx));
-        x[j][i][3] = dt*(-PMLY*x[j][i][3] +(PMLX-PMLY)*(x[j+1][i][1] - x[j-1][i][1])/(2*hy));
+        phi1_old = array_phi1_old[j][i][0];
+        phi1 = array_phi1[j][i][0];
+        phi2_old = array_phi2_old[j][i][0];
+        phi2 = array_phi2[j][i][0];
+
+        array_u_old[j][i][0] = (dt2*(uxx + uyy) +(2.0-dt2*PMLX*PMLY)*u+(dt*(PMLX+PMLY)-1.0)*u_old+ dt2*(array_phi1[j][i+1][0]\
+          -array_phi1[j][i+1][0])/(2*hx) + dt2*(array_phi2[j+1][i][0]-array_phi2[j-1][i][0])/(2*hy))/(1.0+dt*(PMLX+PMLY));
+        array_phi1_old[j][i][0] = 2.0*dt*(-PMLX*phi1 +(PMLY-PMLX)*(array_u[j][i+1][0] - array_u[j][i-1][0])/(2*hx)) + phi1_old;
+        array_phi2_old[j][i][0] = 2.0*dt*(-PMLY*phi2 +(PMLX-PMLY)*(array_u[j+1][i][0] - array_u[j-1][i][0])/(2*hy)) + phi2_old;
       }
       else
       {
-        x[j][i][0] = dt2*(uxx + uyy) + 2.0*u -1.0*u_old;
+        array_u_old[j][i][0] = dt2*(uxx + uyy) + 2.0*u -1.0*u_old;
       }
 
       // Set all values inside of sphere = 0 (TEMP UNTIL EMBEDDED BOUNDARY SET)
       if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) + (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
       {
-        x[j][i][0] = sin(kx*i*hx+ky*hy*j-sqrt(kx*kx+ky*ky)*t);
+        array_u_old[j][i][0] = sin(kx*i*hx+ky*hy*j-sqrt(kx*kx+ky*ky)*t);
       }
     }
   }
 
   for (j=ys; j<ys+ym; j++) {
     for (i=xs; i<xs+xm; i++) {
-      tmp_x = x[j][i][0];
-      x[j][i][0] = x[j][i][1];
-      x[j][i][1] = tmp_x;
+      tmp_x = array_u_old[j][i][0];
+      array_u_old[j][i][0] = array_u[j][i][0];
+      array_u[j][i][0] = tmp_x;
+      if (i*hx<pml_width||Lx-i*hx<pml_width||j*hy<pml_width||Ly-j*hy<pml_width)
+      {
+        tmp_x = array_phi1_old[j][i][0];
+        array_phi1_old[j][i][0] = array_phi1[j][i][0];
+        array_phi1[j][i][0] = tmp_x;
+        tmp_x = array_phi2_old[j][i][0];
+        array_phi2_old[j][i][0] = array_phi2[j][i][0];
+        array_phi2[j][i][0] = tmp_x;
+      }
     }
   }
 
@@ -298,10 +330,35 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
   /*
      Restore vectors
   */
-  ierr = DMDAVecRestoreArrayDOF(da,localX,&x);CHKERRQ(ierr);
-  DMLocalToGlobalBegin(da,localX,INSERT_VALUES,X);
-  DMLocalToGlobalEnd(da,localX,INSERT_VALUES,X);
-  ierr = DMRestoreLocalVector(da,&localX);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_u_old,local_u_old,&array_u_old);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da_u_old,local_u_old,INSERT_VALUES,vec_u_old);
+  DMLocalToGlobalEnd(da_u_old,local_u_old,INSERT_VALUES,vec_u_old);
+  ierr = DMRestoreLocalVector(da_u_old,&local_u_old);CHKERRQ(ierr);
+
+  ierr = DMDAVecRestoreArrayDOF(da_u,local_u,&array_u);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da_u,local_u,INSERT_VALUES,vec_u);
+  DMLocalToGlobalEnd(da_u,local_u,INSERT_VALUES,vec_u);
+  ierr = DMRestoreLocalVector(da_u,&local_u);CHKERRQ(ierr);
+
+  ierr = DMDAVecRestoreArrayDOF(da_phi1_old,local_phi1_old,&array_phi1_old);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da_phi1_old,local_phi1_old,INSERT_VALUES,vec_phi1_old);
+  DMLocalToGlobalEnd(da_phi1_old,local_phi1_old,INSERT_VALUES,vec_phi1_old);
+  ierr = DMRestoreLocalVector(da_phi1_old,&local_phi1_old);CHKERRQ(ierr);
+
+  ierr = DMDAVecRestoreArrayDOF(da_phi1,local_phi1,&array_phi1);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da_phi1,local_phi1,INSERT_VALUES,vec_phi1);
+  DMLocalToGlobalEnd(da_phi1,local_phi1,INSERT_VALUES,vec_phi1);
+  ierr = DMRestoreLocalVector(da_phi1,&local_phi1);CHKERRQ(ierr);
+
+  ierr = DMDAVecRestoreArrayDOF(da_phi2_old,local_phi2_old,&array_phi2_old);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da_phi2_old,local_phi2_old,INSERT_VALUES,vec_phi2_old);
+  DMLocalToGlobalEnd(da_phi2_old,local_phi2_old,INSERT_VALUES,vec_phi2_old);
+  ierr = DMRestoreLocalVector(da_phi2_old,&local_phi2_old);CHKERRQ(ierr);
+
+  ierr = DMDAVecRestoreArrayDOF(da_phi2,local_phi2,&array_phi2);CHKERRQ(ierr);
+  DMLocalToGlobalBegin(da_phi2,local_phi2,INSERT_VALUES,vec_phi2);
+  DMLocalToGlobalEnd(da_phi2,local_phi2,INSERT_VALUES,vec_phi2);
+  ierr = DMRestoreLocalVector(da_phi2,&local_phi2);CHKERRQ(ierr);
 
 
 
@@ -319,10 +376,12 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
   PetscErrorCode ierr;
   PetscInt       i,j,xs,ys,xm,ym,Mx,My;
   PetscScalar    ***u;
+  PetscScalar    **array_u_old,**array_u,**array_phi1_old, **array_phi1;
+  PetscScalar    **array_phi2_old, **array_phi2;
   PetscReal      hx,hy,x,y,r;
 
   PetscFunctionBeginUser;
-  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
+  ierr = DMDAGetInfo(da_u_old,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
                      PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
 
   hx = Lx/(PetscReal)(Mx-1);
@@ -331,12 +390,17 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
   /*
      Get pointers to vector data
   */
-  ierr = DMDAVecGetArrayDOF(da,U,&u);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_u_old,vec_u_old,&array_u_old);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_u,vec_u,&array_u);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi1_old,vec_phi1_old,&array_phi1_old);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi1,vec_phi1,&array_phi1);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi2_old,vec_phi2_old,&array_phi2_old);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayDOF(da_phi2,vec_phi2,&array_phi2);CHKERRQ(ierr);
 
   /*
      Get local grid boundaries
   */
-  ierr = DMDAGetCorners(da,&xs,&ys,NULL,&xm,&ym,NULL);CHKERRQ(ierr);
+  ierr = DMDAGetCorners(da_u_old,&xs,&ys,NULL,&xm,&ym,NULL);CHKERRQ(ierr);
 
   /*
      Compute function over the locally owned part of the grid
@@ -347,10 +411,12 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
     for (i=xs; i<xs+xm; i++) 
     {
       x = i*hx;
-      u[j][i][0] = 0.0;
-      u[j][i][1] = 0.0;
-      u[j][i][2] = 0.0;
-      u[j][i][3] = 0.0;
+      array_u_old[j][i] = 0.0;
+      array_u[j][i] = 0.0;
+      array_phi1_old[j][i] = 0.0;
+      array_phi1[j][i] = 0.0;
+      array_phi2_old[j][i] = 0.0;
+      array_phi2[j][i] = 0.0;
     }
     
   }
@@ -358,7 +424,12 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
   /*
      Restore vectors
   */
-  ierr = DMDAVecRestoreArrayDOF(da,U,&u);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_u_old,vec_u_old,&array_u_old);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_u,vec_u,&array_u);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_phi1_old,vec_phi1_old,&array_phi1_old);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_phi1,vec_phi1,&array_phi1);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_phi2_old,vec_phi2_old,&array_phi2_old);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayDOF(da_phi2,vec_phi2,&array_phi2);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 

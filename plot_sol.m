@@ -34,7 +34,7 @@ for i = 1:1:Nt
   %% Convert to output type
   tmp = table2array(dat);
 
-  U(:,:) = reshape(tmp(1:4:end,:),Mx,My);
+  U(:,:) = reshape(tmp(1:end,:),Mx,My);
       imagesc(x,y,(U(:,:)));
   colormap('jet')
   caxis([-1,1])
