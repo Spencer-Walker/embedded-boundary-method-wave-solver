@@ -25,7 +25,7 @@ y = linspace(0,Ly,My);
 figure
 set(gcf, 'Units', 'Normalized', 'OuterPosition', [0 0 1 1]);
 set(gca,'nextplot','replacechildren'); 
-v = VideoWriter('wave.avi');
+v = VideoWriter('test.avi');
 open(v);
 for i = 1:1:Nt
   % Import the data
@@ -34,20 +34,24 @@ for i = 1:1:Nt
   %% Convert to output type
   tmp = table2array(dat);
 
-  U(:,:) = reshape(tmp(1:end,:),Mx,My);
-      imagesc(x,y,(U(:,:)));
+  U(:,:) = reshape(tmp(1:  end,:),Mx,My);
+      imagesc(x,y,(U(:,:)))  ;
   colormap('jet')
   caxis([-1,1])
   colorbar
   hold on
-  r=0.1;
-  x0=Lx/2;
-  y0=Ly/2;
-  fplot(@(t) r*cos(t)+x0,@(t) r*sin(t)+y0,[0,2*pi],'k','LineWidth',2)
+  %r=0.1;
+  %x0=Lx/2;
+  %y0=Ly/2;
+  %fplot(@(t) r*cos(t)+x0,@(t) r*sin(t)+y0,[0,2*pi],'k','LineWidth',2)
   xline(0.1)
   yline(0.1)
   xline(0.9)
   yline(0.9)
+  xline(0.4)
+  yline(0.4)
+  xline(0.6)
+  yline(0.6)
   hold off
   axis equal
   frame = getframe(gcf);
