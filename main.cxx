@@ -16,9 +16,13 @@ static char help[] = "Solves the wave equation using some embedded boundary meth
 #include <iomanip>
 // Function that makes each processor print in order 
 extern void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...);
-extern PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, \
-  PetscReal pml_width, PetscReal pml_strength, PetscReal t, PetscReal kx, PetscReal ky);
-extern PetscErrorCode FormInitialSolution(DM,Vec, PetscReal, PetscReal, PetscReal,PetscReal);
+externPetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2_old,DM da_phi2, \
+  PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
+  Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
+  PetscReal t, PetscReal kx, PetscReal ky);
+PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
+  , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
+  PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width);
 extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
 extern PetscReal PML(PetscReal Lx, PetscReal x, PetscReal width, PetscReal amp);
 
@@ -33,9 +37,9 @@ int main(int argc,char **argv)
   // PETSC error code
   PetscErrorCode ierr;
   // Discritization manager/distributed array
-  DM             da;
+  DM             da_u_old, da_u, da_phi1_old, da_phi1, da_phi2_old, da_phi2;
   // Solution and residual vectors 
-  Vec            x;                      
+  Vec            vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, vec_phi2;                      
   // PETSC viewer for exporting/printing complicated data structures
   PetscViewer    viewer;
   // 
@@ -71,19 +75,53 @@ int main(int argc,char **argv)
 
   // Create the 2D grid that we will use for this problem
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 4, 1, PETSC_NULL, PETSC_NULL, &da);
-  DMSetFromOptions(da);
-  DMSetUp(da);
-  DMDASetFieldName(da,0,"u_old");
-  DMDASetFieldName(da,1,"u");
-  DMDASetFieldName(da,2,"phi1");
-  DMDASetFieldName(da,3,"phi2");
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_u_old);
+  DMSetFromOptions(da_u_old);
+  DMSetUp(da_u_old);
+  DMDASetFieldName(da_u_old,0,"u_old");
+
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_u);
+  DMSetFromOptions(da_u);
+  DMSetUp(da_u);  
+  DMDASetFieldName(da,0,"u");
+
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi1_old);
+  DMSetFromOptions(da_phi1_old);
+  DMSetUp(da_phi1_old);
+  DMDASetFieldName(da_phi1_old,0,"phi1_old");
+
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi1);
+  DMSetFromOptions(da_phi1);
+  DMSetUp(da_phi1);
+  DMDASetFieldName(da_phi1,0,"phi1");
+
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi2_old);
+  DMSetFromOptions(da_phi2_old);
+  DMSetUp(da_phi2_old);
+  DMDASetFieldName(da_phi2_old,0,"phi2_old");
+
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi2);
+  DMSetFromOptions(da_phi2);
+  DMSetUp(da_phi2);
+  DMDASetFieldName(da_phi2,0,"phi2");
+  
 
   // Create solution and residual vectors
-  DMCreateGlobalVector(da,&x);  
+  DMCreateGlobalVector(da_u_old,&vec_u_old);
+  DMCreateGlobalVector(da_u,&vec_u);
+  DMCreateGlobalVector(da_phi1_old,&vec_phi1_old);
+  DMCreateGlobalVector(da_phi1,&vec_phi1);
+  DMCreateGlobalVector(da_phi2_old,&vec_phi2_old);
+  DMCreateGlobalVector(da_phi2,&vec_phi2);  
 
   // Set initial condition 
-  FormInitialSolution(da,x,Lx,Ly,dt,pml_width);
+  FormInitialSolution(da_u_old, da_u, da_phi1_old, da_phi1, da_phi2_old, da_phi2 \
+    ,vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, vec_phi2, Lx, Ly, dt, pml_width);
   
   // Norm
   PetscReal norm;
@@ -94,22 +132,33 @@ int main(int argc,char **argv)
   for(int i = 0; i< Nt; i++)
   {
     // Timestep 
-    TimeStep(da,Lx,Ly,x,dt,pml_width,pml_strength,dt*i,kx,ky);
+    TimeStep(da_u_old, da_u, da_phi1_old, da_phi1, da_phi2_old, da_phi2\
+      ,Lx,Ly,vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, vec_phi2,dt,pml_width,pml_strength,dt*i,kx,ky);
 
-    ierr = VecNorm(x,NORM_2,&norm);CHKERRQ(ierr);
+    ierr = VecNorm(vec_u_old,NORM_2,&norm);CHKERRQ(ierr);
     if (rank == 0)
       std::cout << "Norm = " << std::setprecision (16) << norm << std::endl;
     std::string s = "wave"+std::to_string(i)+".out";
     PetscViewerASCIIOpen(PETSC_COMM_WORLD,s.c_str(),&viewer);
-    VecView(x,viewer);
+    VecView(vec_u_old,viewer);
 
   }
 
 
   // Free space 
-  VecDestroy(&x);
-  DMDestroy(&da);
-
+  VecDestroy(&vec_u_old);
+  VecDestroy(&vec_u);
+  VecDestroy(&vec_phi1_old);
+  VecDestroy(&vec_phi1);
+  VecDestroy(&vec_phi2_old);
+  VecDestroy(&vec_phi2);
+  DMDestroy(&da_u_old);
+  DMDestroy(&da_u);
+  DMDestroy(&da_phi1_old);
+  DMDestroy(&da_phi1);
+  DMDestroy(&da_phi2_old);
+  DMDestroy(&da_phi2);
+  ViewerDestroy(&viewer);
   // Close PETSC (and MPI)
   PetscFinalize();
   PetscFunctionReturn(0);
@@ -160,14 +209,16 @@ void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...)
    Output Parameter:
 .  F - function vector
  */
-PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, \
-  PetscReal pml_width, PetscReal pml_strength, PetscReal t, PetscReal kx, PetscReal ky)
+PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2_old,DM da_phi2, \
+  PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
+  Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
+  PetscReal t, PetscReal kx, PetscReal ky)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,Mx,My,xs,ys,xm,ym;
   PetscReal      hx,hy,/*hxdhy,hydhx,*/ sx,sy;
   PetscScalar    u_old,uxx,uyy,u,***x, tmp_x;
-  Vec            localX;
+  Vec            local_u_old, local_u, local_phi1_old, local_phi1, local_phi2_old, local_phi2;
 
   PetscFunctionBeginUser;
   ierr = DMGetLocalVector(da,&localX);CHKERRQ(ierr);
@@ -261,7 +312,9 @@ PetscErrorCode TimeStep(DM da, PetscReal Lx, PetscReal Ly, Vec X, PetscReal dt, 
 /* ------------------------------------------------------------------- */
 #undef __FUNCT__
 #define __FUNCT__ "FormInitialSolution"
-PetscErrorCode FormInitialSolution(DM da,Vec U, PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width)
+PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
+  , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
+    PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,xs,ys,xm,ym,Mx,My;
