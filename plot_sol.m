@@ -1,6 +1,6 @@
 clear all; 
 close all;
-Mx = 200; My = 200; Lx = 1.0; Ly = 1.0; Nt = 250;
+Mx = 400; My = 400; Lx = 1.0; Ly = 1.0; Nt = 500;
 
 U = zeros(Mx,My);
 
@@ -44,10 +44,10 @@ for i = 1:1:Nt
   x0=Lx/2;
   y0=Ly/2;
   fplot(@(t) r*cos(t)+x0,@(t) r*sin(t)+y0,[0,2*pi],'k','LineWidth',2)
-  xline(0.25)
-  yline(0.25)
-  xline(0.75)
-  yline(0.75)
+  xline(0.1)
+  yline(0.1)
+  xline(0.9)
+  yline(0.9)
   hold off
   axis equal
   frame = getframe(gcf);
