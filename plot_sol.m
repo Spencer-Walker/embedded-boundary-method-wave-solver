@@ -1,6 +1,6 @@
 clear all; 
 close all;
-Mx = 400; My = 400; Lx = 1.0; Ly = 1.0; Nt = 500;
+Mx = 400; My = 400; Lx = 1.0; Ly = 1.0; Nt = 100;
 
 U = zeros(Mx,My);
 

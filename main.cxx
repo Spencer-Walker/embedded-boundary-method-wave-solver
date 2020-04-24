@@ -14,24 +14,27 @@ static char help[] = "Solves the wave equation using some embedded boundary meth
 #include <petscts.h>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
+#include <stdlib.h>
 // Function that makes each processor print in order 
 extern void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...);
 extern PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2_old,DM da_phi2, \
   PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
   Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
-  PetscReal t, PetscReal kx, PetscReal ky, PetscInt **m, PetscInt **f, PetscInt** d);
+  PetscReal t, PetscReal kx, PetscReal ky, PetscInt *m, PetscReal *f, PetscReal* d, PetscReal* alpha1\
+  , PetscReal *alpha2);
 extern PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
   , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
   PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width);
 extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
 extern PetscReal PML(PetscReal Lx, PetscReal x, PetscReal width, PetscReal amp);
-
+using namespace std;
 // Main
 int main(int argc,char **argv)
 {
   //---------------------------------------------------------------------------
   // Number of global gridpoints in the x and y direction
-  PetscInt       Mx = 50, My = 50, Nt = 10;
+  PetscInt       Mx = 10, My = 10, Nt = 1;
   // MPI rank and size
   PetscMPIInt    rank,size;
   // PETSC error code
@@ -45,7 +48,8 @@ int main(int argc,char **argv)
   // 
   PetscReal      dt = 0.005, Lx = 1.0, Ly = 1.0, pml_width = 0.0, pml_strength = 0.0;
   PetscReal      kx = 100.0, ky = 0.0;
-  PetscInt       **m, **f, **d;
+  PetscInt       *m;
+  PetscReal      *f, *d, *alpha1, *alpha2;
   //-------------------------------------------------------------------------------------
   // Setup PETSC and MPI 
   //-------------------------------------------------------------------------------------
@@ -64,28 +68,88 @@ int main(int argc,char **argv)
   My = Mx;
   ierr = PetscOptionsGetInt(NULL,NULL,"-Nt",&Nt,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL);CHKERRQ(ierr);
-  ierr = PetscOptionsGetReal(NULL,NULL,"-Lx",&Lx,NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsGetReal(NULL,NULL,"-L",&Lx,NULL);CHKERRQ(ierr);
   Ly = Lx;
   ierr = PetscOptionsGetReal(NULL,NULL,"-pml_width",&pml_width,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-pml_strength",&pml_strength,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-kx",&kx,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-ky",&ky,NULL);CHKERRQ(ierr);
 
-  m = new PetscInt*[My];
-  d = new PetscInt*[My];
-  f = new PetscInt*[My];
-  for(PetscInt i = 0; i< My; i++)
-  {
-    m[i] = new PetscInt[Mx];
-    d[i] = new PetscInt[Mx];
-    f[i] = new PetscInt[Mx];
-    for(PetscInt j=0; j<Mx; j++)
-    {
-      m[i][j] = 1;
-      d[i][j] = 0;
-      f[i][j] = 0;
-    }
+  m = new PetscInt[Mx*My];
+  d = new PetscReal[Mx*My];
+  f = new PetscReal[Mx*My];
+  alpha1 = new PetscReal[Mx*My];
+  alpha2 = new PetscReal[Mx*My];
 
+
+  ifstream myReadFile;
+  myReadFile.open("mij.out");
+  PetscReal output;
+  string str;
+  
+  for(int j = 0; j < My; j++)
+  {
+    for(int i = 0; i <Mx ; i++)
+    {
+      
+      getline(myReadFile,str);
+      output = atof(str.c_str());
+      m[j*Mx + i] = (PetscInt) round(output);
+      std::cout <<  i << "," << j <<std::endl;
+      
+    }
+  }
+
+  for(int j = 0; j < My; j++)
+  {
+    for(int i = 0; i <Mx ; i++)
+    {
+      std::cout <<  m[j*Mx + i]<<std::endl;
+    }
+  }
+  
+  myReadFile.close();
+
+  myReadFile.open("alpha_1.out");
+  for(int j = 0; j < My; j ++)
+  {
+    for(int i = 0; i <Mx ; i ++)
+    {
+      getline(myReadFile,str);
+      output = atof(str.c_str());
+      alpha1[j*Mx + i] = output*(Mx-1)/Lx;
+    }
+  }
+  myReadFile.close();
+
+  myReadFile.open("alpha_2.out");
+  for(int j = 0; j < My; j ++)
+  {
+    for(int i = 0; i <Mx ; i ++)
+    {
+     
+      getline(myReadFile,str);
+      output = atof(str.c_str());
+      alpha2[j*Mx + i] = output*(My-1)/Ly;
+      
+    }
+  }
+  myReadFile.close();
+
+  for(int j =0; j<My;j++)
+  {
+    for(int i=0;i<Mx;i++)
+    {
+      d[j*Mx+i] = 0.0;
+      if (not isnan((1.0-alpha1[j*Mx+i])) and not isinf((1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i]))
+        d[j*Mx + i] += (1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i];
+      if (not isnan((1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i]) and not isinf((1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i]))
+        d[j*Mx + i] += (1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i];
+      
+      
+      if(m[j*Mx+i] == -1)
+        std::cout << "one = "<< d[j*Mx + i] << (1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i]<< " two = " << (1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i] << std::endl;
+    }
   }
 
   // Only rank 0 prints things (just gridpoints for now)
@@ -153,7 +217,8 @@ int main(int argc,char **argv)
     // Timestep 
     TimeStep(da_u_old, da_u, da_phi1_old, da_phi1, da_phi2_old, da_phi2\
       ,Lx,Ly,vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, \
-      vec_phi2,dt,pml_width,pml_strength,dt*i,kx,ky,m,f,d);
+      vec_phi2,dt,pml_width,pml_strength,dt*i,kx,ky,m,f,d,alpha1,alpha2);
+      
 
     ierr = VecNorm(vec_u_old,NORM_2,&norm);CHKERRQ(ierr);
     if (rank == 0)
@@ -166,12 +231,6 @@ int main(int argc,char **argv)
 
 
   // Free space 
-  for(PetscInt i = 0; i< My; i++)
-  {
-    delete [] m[i];
-    delete [] d[i];
-    delete [] f[i];
-  }
   delete [] m;
   delete [] d;
   delete [] f;
@@ -181,6 +240,7 @@ int main(int argc,char **argv)
   VecDestroy(&vec_phi1);
   VecDestroy(&vec_phi2_old);
   VecDestroy(&vec_phi2);
+
   DMDestroy(&da_u_old);
   DMDestroy(&da_u);
   DMDestroy(&da_phi1_old);
@@ -190,7 +250,7 @@ int main(int argc,char **argv)
   PetscViewerDestroy(&viewer);
   // Close PETSC (and MPI)
   PetscFinalize();
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(0);   
 }
 
 #undef __FUNCT__
@@ -241,7 +301,8 @@ void printInOrder(PetscMPIInt rank, PetscMPIInt size, const char* fmt, ...)
 PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2_old,DM da_phi2, \
   PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
   Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
-  PetscReal t, PetscReal kx, PetscReal ky, PetscInt **m, PetscInt **f, PetscInt** d)
+  PetscReal t, PetscReal kx, PetscReal ky, PetscInt *m, PetscReal *f, PetscReal* d, PetscReal* alpha1\
+  , PetscReal *alpha2)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,Mx,My,xs,ys,xm,ym;
@@ -309,7 +370,8 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
       }
       u_old      = array_u_old[j][i][0];
       u          = array_u[j][i][0];
-      if (m[j][i]==1)
+      
+      if (m[j*Mx+i]==0)
       {
         PMLX = PML(Lx,i*hx,pml_width,pml_strength );
         uxx        = (-2.0*u + array_u[j][i-1][0] + array_u[j][i+1][0])*sx;
@@ -333,21 +395,34 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
       }
 
       // Set all values inside of sphere = 0 (TEMP UNTIL EMBEDDED BOUNDARY SET)
-      if(m[j][i] == -1)
+      if(m[j*Mx+i] == -1)
       {
+        f[j*Mx+i] = 0.0;
+        if (not isnan(((1-alpha1[j*Mx+i])*array_u[j][i][0]+alpha1[j*Mx+i]*array_u[j][i-1][0])/alpha1[j*Mx+i]) and not isinf(((1-alpha1[j*Mx+i])*array_u[j][i][0]+alpha1[j*Mx+i]*array_u[j][i-1][0])/alpha1[j*Mx+i]))
+        {
+          f[j*Mx + i] += ((1-alpha1[j*Mx+i])*array_u[j][i][0]+alpha1[j*Mx+i]*array_u[j][i-1][0])/alpha1[j*Mx+i];
+        }
+        else
+        {
+          f[j*Mx + i] = array_u[j][i];
+        }
+        if (not isnan(((1-alpha2[j*Mx+i])*array_u[j][i][0]+alpha2[j*Mx+i]*array_u[j+1][i][0])/alpha2[j*Mx+i]) and not isinf(((1-alpha2[j*Mx+i])*array_u[j][i][0]+alpha2[j*Mx+i]*array_u[j+1][i][0])/alpha2[j*Mx+i]))
+          f[j*Mx + i] += ((1-alpha2[j*Mx+i])*array_u[j][i][0]+alpha2[j*Mx+i]*array_u[j+1][i][0])/alpha2[j*Mx+i];
+  
+
         array_u_old[j][i][0] = (dt2*sy*(-4.0*u+array_u[j][i+1][0]+array_u[j-1][i][0])\
-          - dt2*sx*0.5*u_old*d[j][i] + dt2*sx*f[j][i])/(1.0+dt2*sx*0.5*d[j][i]);
+          - dt2*sx*0.5*u_old*d[j*Mx+i] + dt2*sx*f[j*Mx+i])/(1.0+dt2*sx*0.5*d[j*Mx+i]);
       }
 
-      if (m[j][i] == 0 )
+      if (m[j*Mx+i] == 1 )
       {
-        array_u_old[j][i][0] = -sin(kx*i*hx+ky*hy*j-sqrt(kx*kx+ky*ky)*t);
+        array_u_old[j][i][0] = -sin(kx*(i*hx)+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
       }
 
-      if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) < 0.1*0.1 and (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
+      /*if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) < 0.1*0.1 and (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
       {
         array_u_old[j][i][0] = -sin(kx*i*hx+ky*hy*j-sqrt(kx*kx+ky*ky)*t);
-      }
+      }*/
     }
   }
 
