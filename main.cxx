@@ -22,7 +22,7 @@ extern PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM 
   PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
   Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
   PetscReal t, PetscReal kx, PetscReal ky, PetscInt *m, PetscReal *f, PetscReal* d, PetscReal* alpha1\
-  , PetscReal *alpha2);
+  , PetscReal *alpha2,PetscReal gamma);
 extern PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
   , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
   PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width);
@@ -49,7 +49,7 @@ int main(int argc,char **argv)
   PetscReal      dt = 0.005, Lx = 1.0, Ly = 1.0, pml_width = 0.0, pml_strength = 0.0;
   PetscReal      kx = 100.0, ky = 0.0;
   PetscInt       *m;
-  PetscReal      *f, *d, *alpha1, *alpha2;
+  PetscReal      *f, *d, *alpha1, *alpha2, gamma = 0.01;
   //-------------------------------------------------------------------------------------
   // Setup PETSC and MPI 
   //-------------------------------------------------------------------------------------
@@ -74,7 +74,7 @@ int main(int argc,char **argv)
   ierr = PetscOptionsGetReal(NULL,NULL,"-pml_strength",&pml_strength,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-kx",&kx,NULL);CHKERRQ(ierr);
   ierr = PetscOptionsGetReal(NULL,NULL,"-ky",&ky,NULL);CHKERRQ(ierr);
-
+	ierr = PetscOptionsGetReal(NULL,NULL,"-gamma",&gamma,NULL);CHKERRQ(ierr);
   m = new PetscInt[Mx*My];
   d = new PetscReal[Mx*My];
   f = new PetscReal[Mx*My];
@@ -95,16 +95,7 @@ int main(int argc,char **argv)
       getline(myReadFile,str);
       output = atof(str.c_str());
       m[j*Mx + i] = (PetscInt) round(output);
-      std::cout <<  i << "," << j <<std::endl;
       
-    }
-  }
-
-  for(int j = 0; j < My; j++)
-  {
-    for(int i = 0; i <Mx ; i++)
-    {
-      std::cout <<  m[j*Mx + i]<<std::endl;
     }
   }
   
@@ -117,7 +108,7 @@ int main(int argc,char **argv)
     {
       getline(myReadFile,str);
       output = atof(str.c_str());
-      alpha1[j*Mx + i] = output*(Mx-1)/Lx;
+      alpha1[j*Mx + i] = output;
     }
   }
   myReadFile.close();
@@ -130,7 +121,7 @@ int main(int argc,char **argv)
      
       getline(myReadFile,str);
       output = atof(str.c_str());
-      alpha2[j*Mx + i] = output*(My-1)/Ly;
+      alpha2[j*Mx + i] = output;
       
     }
   }
@@ -147,8 +138,6 @@ int main(int argc,char **argv)
         d[j*Mx + i] += (1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i];
       
       
-      if(m[j*Mx+i] == -1)
-        std::cout << "one = "<< d[j*Mx + i] << (1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i]<< " two = " << (1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i] << std::endl;
     }
   }
 
@@ -158,37 +147,37 @@ int main(int argc,char **argv)
 
   // Create the 2D grid that we will use for this problem
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_u_old);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 2, PETSC_NULL, PETSC_NULL, &da_u_old);
   DMSetFromOptions(da_u_old);
   DMSetUp(da_u_old);
   DMDASetFieldName(da_u_old,0,"u_old");
 
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_u);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 2, PETSC_NULL, PETSC_NULL, &da_u);
   DMSetFromOptions(da_u);
   DMSetUp(da_u);  
   DMDASetFieldName(da_u,0,"u");
 
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi1_old);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 2, PETSC_NULL, PETSC_NULL, &da_phi1_old);
   DMSetFromOptions(da_phi1_old);
   DMSetUp(da_phi1_old);
   DMDASetFieldName(da_phi1_old,0,"phi1_old");
 
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi1);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 2, PETSC_NULL, PETSC_NULL, &da_phi1);
   DMSetFromOptions(da_phi1);
   DMSetUp(da_phi1);
   DMDASetFieldName(da_phi1,0,"phi1");
 
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi2_old);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 2, PETSC_NULL, PETSC_NULL, &da_phi2_old);
   DMSetFromOptions(da_phi2_old);
   DMSetUp(da_phi2_old);
   DMDASetFieldName(da_phi2_old,0,"phi2_old");
 
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
-    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 1, PETSC_NULL, PETSC_NULL, &da_phi2);
+    Mx, My, PETSC_DECIDE, PETSC_DECIDE, 1, 2, PETSC_NULL, PETSC_NULL, &da_phi2);
   DMSetFromOptions(da_phi2);
   DMSetUp(da_phi2);
   DMDASetFieldName(da_phi2,0,"phi2");
@@ -217,7 +206,7 @@ int main(int argc,char **argv)
     // Timestep 
     TimeStep(da_u_old, da_u, da_phi1_old, da_phi1, da_phi2_old, da_phi2\
       ,Lx,Ly,vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, \
-      vec_phi2,dt,pml_width,pml_strength,dt*i,kx,ky,m,f,d,alpha1,alpha2);
+      vec_phi2,dt,pml_width,pml_strength,dt*i,kx,ky,m,f,d,alpha1,alpha2,gamma);
       
 
     ierr = VecNorm(vec_u_old,NORM_2,&norm);CHKERRQ(ierr);
@@ -302,7 +291,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
   PetscReal Lx, PetscReal Ly, Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, \
   Vec vec_phi2_old, Vec vec_phi2, PetscReal dt, PetscReal pml_width, PetscReal pml_strength, \
   PetscReal t, PetscReal kx, PetscReal ky, PetscInt *m, PetscReal *f, PetscReal* d, PetscReal* alpha1\
-  , PetscReal *alpha2)
+  , PetscReal *alpha2,PetscReal gamma)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,Mx,My,xs,ys,xm,ym;
@@ -397,23 +386,92 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
       // Set all values inside of sphere = 0 (TEMP UNTIL EMBEDDED BOUNDARY SET)
       if(m[j*Mx+i] == -1)
       {
-        f[j*Mx+i] = 0.0;
-        if (not isnan(((1-alpha1[j*Mx+i])*array_u[j][i][0]+alpha1[j*Mx+i]*array_u[j][i-1][0])/alpha1[j*Mx+i]) and not isinf(((1-alpha1[j*Mx+i])*array_u[j][i][0]+alpha1[j*Mx+i]*array_u[j][i-1][0])/alpha1[j*Mx+i]))
+        PetscScalar den = 0;
+        PetscScalar xi,yj,xb,yb,g0,ub,xI,yI,gI,uI,xII,yII,gII,uII;
+        if (m[j*Mx+i+1] == 0 )
         {
-          f[j*Mx + i] += ((1-alpha1[j*Mx+i])*array_u[j][i][0]+alpha1[j*Mx+i]*array_u[j][i-1][0])/alpha1[j*Mx+i];
-        }
-        else
-        {
-          f[j*Mx + i] = array_u[j][i];
-        }
-        if (not isnan(((1-alpha2[j*Mx+i])*array_u[j][i][0]+alpha2[j*Mx+i]*array_u[j+1][i][0])/alpha2[j*Mx+i]) and not isinf(((1-alpha2[j*Mx+i])*array_u[j][i][0]+alpha2[j*Mx+i]*array_u[j+1][i][0])/alpha2[j*Mx+i]))
-          f[j*Mx + i] += ((1-alpha2[j*Mx+i])*array_u[j][i][0]+alpha2[j*Mx+i]*array_u[j+1][i][0])/alpha2[j*Mx+i];
-  
+          xi = i*hx;
+          xb = xi+alpha1[j*Mx+i];
+          xI = hx*(i+1);
+          uI = array_u[j][i+1][0];
+          xII = hx*(i+2);
+          uII = array_u[j][i+2][0];
+          g0 = (xb-xI)*(xb-xII)/(xi-xI)/(xi-xII);
+          gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
+          gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
+          ub = -sin(kx*xb+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
 
-        array_u_old[j][i][0] = (dt2*sy*(-4.0*u+array_u[j][i+1][0]+array_u[j-1][i][0])\
-          - dt2*sx*0.5*u_old*d[j*Mx+i] + dt2*sx*f[j*Mx+i])/(1.0+dt2*sx*0.5*d[j*Mx+i]);
+          den = (g0+gamma);
+          array_u_old[j][i][0] = (ub-(gI-2.0*gamma)*uI-(gII+gamma)*uII)/(g0+gamma);
+        }
+        if (m[j*Mx+i-1] == 0 )
+        {
+          xi = i*hx;
+          xb = xi+alpha1[j*Mx+i];
+          xI = hx*(i-1);
+          uI = array_u[j][i-1][0];
+          xII = hx*(i-2);
+          uII = array_u[j][i-2][0];
+          g0 = (xb-xI)*(xb-xII)/(xi-xI)/(xi-xII);
+          gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
+          gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
+
+          ub = -sin(kx*xb+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
+          
+          if (abs(g0+gamma)>abs(den))
+          {
+            array_u_old[j][i][0] = (ub-(gI-2.0*gamma)*uI-(gII+gamma)*uII)/(g0+gamma);
+            den = g0+gamma;
+          }
+            
+        }
+        if (m[(j+1)*Mx+i] == 0 )
+        {
+          yj = j*hy;
+          xb = yj+alpha2[j*Mx+i];
+          xI = hy*(j+1);
+          uI = array_u[j+1][i][0];
+          xII = hy*(j+2);
+          uII = array_u[j+2][i][0];
+          g0 = (xb-xI)*(xb-xII)/(xi-xI)/(xi-xII);
+          gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
+          gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
+          
+          ub = -sin(kx*(i*hx)+ky*xb-sqrt(kx*kx+ky*ky)*t);
+          if (abs(g0+gamma)>abs(den))
+          {
+            array_u_old[j][i][0] = (ub-(gI-2.0*gamma)*uI-(gII+gamma)*uII)/(g0+gamma);
+            den = g0+gamma;
+          }
+        }
+        if(m[(j-1)*Mx+i] == 0)
+        {
+          yj = j*hy;
+          xb = yj+alpha2[j*Mx+i];
+          xI = hy*(j-1);
+          uI = array_u[j-1][i][0];
+          xII = hy*(j-2);
+          uII = array_u[j-2][i][0];
+          g0 = (xb-xI)*(xb-xII)/(xi-xI)/(xi-xII);
+          gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
+          gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
+          
+          ub = -sin(kx*(i*hx)+ky*xb-sqrt(kx*kx+ky*ky)*t);
+
+          if (abs(g0+gamma)>abs(den))
+          {
+            array_u_old[j][i][0] = (ub-(gI-2.0*gamma)*uI-(gII+gamma)*uII)/(g0+gamma);
+            den = g0+gamma;
+          }
+        }
+        if( not (m[(j-1)*Mx+i] == 0 and m[(j+1)*Mx+i] == 0 and m[(j)*Mx+i-1] == 0 and m[(j)*Mx+i+1] == 0))
+        {
+            array_u_old[j][i][0] = -sin(kx*(i*hx)+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
+        }
+          
       }
 
+      
       if (m[j*Mx+i] == 1 )
       {
         array_u_old[j][i][0] = -sin(kx*(i*hx)+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
