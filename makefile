@@ -1,6 +1,6 @@
 -include ../petscdir.mk
 CFLAGS     =
-CPPFLAGS   =
+CPPFLAGS   = -std=c++11
 LIBFILES   = ${PETSC_KSP_LIB} 
 TARGET     = main
 OBJFILES   = main.o 

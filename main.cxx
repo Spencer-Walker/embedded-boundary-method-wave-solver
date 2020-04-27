@@ -132,9 +132,9 @@ int main(int argc,char **argv)
     for(int i=0;i<Mx;i++)
     {
       d[j*Mx+i] = 0.0;
-      if (not isnan((1.0-alpha1[j*Mx+i])) and not isinf((1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i]))
+      if (not std::isnan((1.0-alpha1[j*Mx+i])) and not std::isinf((1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i]))
         d[j*Mx + i] += (1.0-alpha1[j*Mx+i])/alpha1[j*Mx+i];
-      if (not isnan((1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i]) and not isinf((1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i]))
+      if (not std::isnan((1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i]) and not std::isinf((1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i]))
         d[j*Mx + i] += (1.0-alpha2[j*Mx+i])/alpha2[j*Mx+i];
       
       
