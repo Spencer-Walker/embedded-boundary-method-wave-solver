@@ -545,8 +545,8 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
 {
   PetscErrorCode ierr;
   PetscInt       i,j,xs,ys,xm,ym,Mx,My;
-  PetscScalar    **array_u_old,**array_u,**array_phi1_old, **array_phi1;
-  PetscScalar    **array_phi2_old, **array_phi2;
+  PetscScalar    ***array_u_old,***array_u,***array_phi1_old, ***array_phi1;
+  PetscScalar    ***array_phi2_old, ***array_phi2;
   
   PetscFunctionBeginUser;
   ierr = DMDAGetInfo(da_u_old,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
@@ -574,12 +574,12 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
   {
     for (i=xs; i<xs+xm; i++) 
     {
-      array_u_old[j][i] = 0.0;
-      array_u[j][i] = 0.0;
-      array_phi1_old[j][i] = 0.0;
-      array_phi1[j][i] = 0.0;
-      array_phi2_old[j][i] = 0.0;
-      array_phi2[j][i] = 0.0;
+      array_u_old[j][i][0] = 0.0;
+      array_u[j][i][0] = 0.0;
+      array_phi1_old[j][i][0] = 0.0;
+      array_phi1[j][i][0] = 0.0;
+      array_phi2_old[j][i][0] = 0.0;
+      array_phi2[j][i][0] = 0.0;
     }
     
   }
