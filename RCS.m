@@ -30,7 +30,7 @@ opts.DataLines = [4, Inf];
 opts.Delimiter = ",";
 
 % Specify column names and types
-opts.VariableNames = "VecObject8MPIprocesses";
+opts.VariableNames = "VecObject6MPIprocesses";
 opts.VariableTypes = "double";
 
 % Specify file level properties
@@ -41,7 +41,7 @@ opts.EmptyLineRule = "read";
 %%
 
 % Import the data
-dat = readtable("/home/peter/git/embedded-boundary-method-wave-solver/Circle/wave"+t+".out", opts);
+dat = readtable("/home/peter/git/embedded-boundary-method-wave-solver/CircleLeft/wave"+t+".out", opts);
 
 % Convert to output type
 tmp = table2array(dat);
@@ -69,4 +69,4 @@ for ii = 1:n_theta
 end
 
 figure
-polarplot(2 * pi - linspace(0, 2 * pi, n_theta), rcs)
+polarplot(linspace(0, 2 * pi, n_theta), rcs)
