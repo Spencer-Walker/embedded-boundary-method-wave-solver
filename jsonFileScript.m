@@ -1,7 +1,7 @@
 clear; close all; clc;
 % load spline data 
-topSplineData=load('topSpline.mat');
-botSplineData=load('botSpline.mat');
+topSplineData=load('splines/topSpline_centerUFO.mat');
+botSplineData=load('splines/botSpline_centerUFO.mat');
 
 % upload a .json file and chekc its contents
 fname = 'input.json';
