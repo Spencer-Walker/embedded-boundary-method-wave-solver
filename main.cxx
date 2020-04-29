@@ -193,7 +193,7 @@ int main(int argc,char **argv)
 
   // Set initial condition 
   FormInitialSolution(da_u_old, da_u, da_phi1_old, da_phi1, da_phi2_old, da_phi2 \
-    ,vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, vec_phi2, Lx, Ly, dt, pml_width);
+    ,vec_u_old, vec_u, vec_phi1_old, vec_phi1, vec_phi2_old, vec_phi2, Lx, Ly, dt, pml_width, kx, ky);
   
   // Norm
   PetscReal norm;
@@ -399,7 +399,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
           g0 = (xb-xI)*(xb-xII)/(xi-xI)/(xi-xII);
           gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
           gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
-          ub = -sin(kx*xb+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
+          ub = sin(sqrt(kx*kx+ky*ky)*(xb-t))*sin(sqrt(kx*kx+ky*ky)*(hy*j));
 
           den = (g0+gamma);
           array_u_old[j][i][0] = (ub-(gI-2.0*gamma)*uI-(gII+gamma)*uII)/(g0+gamma);
@@ -416,7 +416,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
           gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
           gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
 
-          ub = -sin(kx*xb+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
+          ub = sin(sqrt(kx*kx+ky*ky)*(xb-t))*sin(sqrt(kx*kx+ky*ky)*(hy*j));
           
           if (abs(g0+gamma)>abs(den))
           {
@@ -437,7 +437,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
           gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
           gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
           
-          ub = -sin(kx*(i*hx)+ky*xb-sqrt(kx*kx+ky*ky)*t);
+          ub = sin(sqrt(kx*kx+ky*ky)*(hx*i-t))*sin(sqrt(kx*kx+ky*ky)*xb);
           if (abs(g0+gamma)>abs(den))
           {
             array_u_old[j][i][0] = (ub-(gI-2.0*gamma)*uI-(gII+gamma)*uII)/(g0+gamma);
@@ -456,7 +456,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
           gI = (xb-xi)*(xb-xII)/(xI-xi)/(xI-xII);
           gII = (xb-xi)*(xb-xI)/(xII-xi)/(xII-xI);
           
-          ub = -sin(kx*(i*hx)+ky*xb-sqrt(kx*kx+ky*ky)*t);
+          ub = sin(sqrt(kx*kx+ky*ky)*(hx*i-t))*sin(sqrt(kx*kx+ky*ky)*xb);
 
           if (abs(g0+gamma)>abs(den))
           {
@@ -466,7 +466,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
         }
         if( not (m[(j-1)*Mx+i] == 0 and m[(j+1)*Mx+i] == 0 and m[(j)*Mx+i-1] == 0 and m[(j)*Mx+i+1] == 0))
         {
-            array_u_old[j][i][0] = -sin(kx*(i*hx)+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
+            array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(hx*i-t))*sin(sqrt(kx*kx+ky*ky)*(hy*j));
         }
           
       }
@@ -474,7 +474,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
       
       if (m[j*Mx+i] == 1 )
       {
-        array_u_old[j][i][0] = -sin(kx*(i*hx)+ky*(hy*j)-sqrt(kx*kx+ky*ky)*t);
+        array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(hx*i-t)*sin(sqrt(kx*kx+ky*ky)*(hy*j));
       }
 
       /*if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) < 0.1*0.1 and (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
@@ -541,16 +541,20 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
 #define __FUNCT__ "FormInitialSolution"
 PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
   , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
-    PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width)
+    PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width, PetscReal kx, PetscReal ky)
 {
   PetscErrorCode ierr;
   PetscInt       i,j,xs,ys,xm,ym,Mx,My;
+  PetscReal      hx, hy;
   PetscScalar    ***array_u_old,***array_u,***array_phi1_old, ***array_phi1;
   PetscScalar    ***array_phi2_old, ***array_phi2;
   
   PetscFunctionBeginUser;
   ierr = DMDAGetInfo(da_u_old,PETSC_IGNORE,&Mx,&My,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,
                      PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  hx = Lx / (PetscReal)(Mx - 1);
+  hy = Ly / (PetscReal)(My - 1);
 
   /*
      Get pointers to vector data
@@ -574,8 +578,8 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
   {
     for (i=xs; i<xs+xm; i++) 
     {
-      array_u_old[j][i][0] = 0.0;
-      array_u[j][i][0] = 0.0;
+      array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(i*hx-(t-dt)))*sin(sqrt(kx*kx+ky*ky)*(j*hy));
+      array_u[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(i*hx-t))*sin(sqrt(kx*kx+ky*ky)*(j*hy));
       array_phi1_old[j][i][0] = 0.0;
       array_phi1[j][i][0] = 0.0;
       array_phi2_old[j][i][0] = 0.0;
