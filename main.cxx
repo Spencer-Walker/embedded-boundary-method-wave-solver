@@ -61,8 +61,11 @@ int main(int argc,char **argv)
   MPI_Comm_size(PETSC_COMM_WORLD,&size);
 
   // Print hi in order
-  printInOrder(rank,size,"HI FROM RANK = %d of SIZE = %d \n", rank, size);
+  //printInOrder(rank,size,"HI FROM RANK = %d of SIZE = %d \n", rank, size);
   
+  // Start timing
+  double start_time = MPI_Wtime();
+
   // Extra command line arguments for the global gridpoints 
   ierr = PetscOptionsGetInt(NULL,NULL,"-M",&Mx,NULL);CHKERRQ(ierr);
   My = Mx;
@@ -142,8 +145,8 @@ int main(int argc,char **argv)
   }
 
   // Only rank 0 prints things (just gridpoints for now)
-  if (rank == 0) 
-     PetscPrintf(PETSC_COMM_SELF,"[%d/%d] Mx = %D, My = %D \n",rank,size,Mx,My); 
+  //if (rank == 0) 
+  //   PetscPrintf(PETSC_COMM_SELF,"[%d/%d] Mx = %D, My = %D \n",rank,size,Mx,My); 
 
   // Create the 2D grid that we will use for this problem
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_STAR, \
@@ -198,8 +201,8 @@ int main(int argc,char **argv)
   // Norm
   PetscReal norm;
   ierr = VecNorm(vec_u_old,NORM_2,&norm);CHKERRQ(ierr);
-  if (rank == 0)
-    std::cout << "Initial Norm = " << norm << std::endl;
+  //if (rank == 0)
+  //  std::cout << "Initial Norm = " << norm << std::endl;
 
   for(int i = 0; i< Nt; i++)
   {
@@ -210,13 +213,18 @@ int main(int argc,char **argv)
       
 
     ierr = VecNorm(vec_u_old,NORM_2,&norm);CHKERRQ(ierr);
-    if (rank == 0)
-      std::cout << "Norm = " << std::setprecision (16) << norm << std::endl;
-    std::string s = "wave"+std::to_string(i)+".out";
-    PetscViewerASCIIOpen(PETSC_COMM_WORLD,s.c_str(),&viewer);
-    VecView(vec_u_old,viewer);
+    //if (rank == 0)
+    //  std::cout << "Norm = " << std::setprecision (16) << norm << std::endl;
+    //std::string s = "wave"+std::to_string(i)+".out";
+    //PetscViewerASCIIOpen(PETSC_COMM_WORLD,s.c_str(),&viewer);
+    //VecView(vec_u_old,viewer);
 
   }
+
+  // Stop timing
+  double end_time = MPI_Wtime();
+  if (rank == 0)
+	  std::cout << end_time - start_time << "\n";
 
 
   // Free space 
@@ -237,6 +245,7 @@ int main(int argc,char **argv)
   DMDestroy(&da_phi2_old);
   DMDestroy(&da_phi2);
   PetscViewerDestroy(&viewer);
+
   // Close PETSC (and MPI)
   PetscFinalize();
   PetscFunctionReturn(0);   
