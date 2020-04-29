@@ -12,12 +12,9 @@ with open(cwd+"/input.json", 'r') as f:
     if "np" not in key:
       parameters_str += " -" + key + " " + str(val)  
 
-print("matlab -nodisplay -nosplash -nodesktop -r \"cd " + cwd + ";run('jsonFileScript.m');exit;\"")
 
-os.system("matlab -nodisplay -nosplash -nodesktop -r \"cd " + cwd + ";run('jsonFileScript.m');exit;\"")
+os.system("matlab -nodisplay -nosplash -nodesktop -r \"cd " + cwd + ";run('jsonFileScriptForCircle.m');exit;\"")
 
-print("mpirun -np " + str(data["np"]) + \
-  " " + path+"/main" + parameters_str)
-
-os.system("mpirun -np " + str(data["np"]) + \
-  " "+path+"/main" + parameters_str)
+for np in range(1, data["np"]+1):
+    os.system("mpirun -np " + str(np) + \
+              " "+path+"/main" + parameters_str)
