@@ -25,7 +25,7 @@ extern PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM 
   , PetscReal *alpha2,PetscReal gamma);
 extern PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_phi1, DM da_phi2_old, DM da_phi2\
   , Vec vec_u_old, Vec vec_u, Vec vec_phi1_old, Vec vec_phi1, Vec vec_phi2_old, Vec vec_phi2 , \
-  PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width);
+  PetscReal Lx, PetscReal Ly, PetscReal dt,PetscReal width, PetscReal kx, PetscReal ky);
 extern PetscErrorCode MyMonitor(TS,PetscInt,PetscReal,Vec,void*);
 extern PetscReal PML(PetscReal Lx, PetscReal x, PetscReal width, PetscReal amp);
 using namespace std;
@@ -379,7 +379,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
         }
         else
         {
-          array_u_old[j][i][0] = dt2*(uxx + uyy) + 2.0*u -1.0*u_old;
+          array_u_old[j][i][0] = dt2*(uxx + uyy + (kx*kx+ky*ky)*sin(sqrt(kx*kx+ky*ky)*(hx*i-t))*sin(sqrt(kx*kx+ky*ky)*(hy*j))) + 2.0*u -1.0*u_old;
         }
       }
 
@@ -474,7 +474,7 @@ PetscErrorCode TimeStep(DM da_u_old,DM da_u,DM da_phi1_old,DM da_phi1,DM da_phi2
       
       if (m[j*Mx+i] == 1 )
       {
-        array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(hx*i-t)*sin(sqrt(kx*kx+ky*ky)*(hy*j));
+        array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(hx*i-t))*sin(sqrt(kx*kx+ky*ky)*(hy*j));
       }
 
       /*if ( (i*hx-Lx/2.0)*(i*hx-Lx/2.0) < 0.1*0.1 and (j*hy-Ly/2.0)*(j*hy-Ly/2.0) < 0.1*0.1)
@@ -578,8 +578,8 @@ PetscErrorCode FormInitialSolution( DM da_u_old, DM da_u, DM da_phi1_old, DM da_
   {
     for (i=xs; i<xs+xm; i++) 
     {
-      array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(i*hx-(t-dt)))*sin(sqrt(kx*kx+ky*ky)*(j*hy));
-      array_u[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(i*hx-t))*sin(sqrt(kx*kx+ky*ky)*(j*hy));
+      array_u_old[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(i*hx+dt))*sin(sqrt(kx*kx+ky*ky)*(j*hy));
+      array_u[j][i][0] = sin(sqrt(kx*kx+ky*ky)*(i*hx))*sin(sqrt(kx*kx+ky*ky)*(j*hy));
       array_phi1_old[j][i][0] = 0.0;
       array_phi1[j][i][0] = 0.0;
       array_phi2_old[j][i][0] = 0.0;
