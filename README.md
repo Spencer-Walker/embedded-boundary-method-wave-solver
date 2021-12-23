@@ -4,4 +4,5 @@ mathed layer.
 
 Applications to wave scattering off different targets and computing radar cross-sections.
 
-Slack channel: [alientaskforce.slack.com]
+Additional Information: 
+https://docs.google.com/presentation/d/1u9jhfUMmxpreFefCLK8BtewU96enVozHZCp2t3lNIZE/edit?usp=sharing
